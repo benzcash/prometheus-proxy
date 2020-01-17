@@ -9,9 +9,30 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-// Proxy
+var (
+	listenAddress = kingpin.Flag(
+		"web.listen-address",
+		"Address on which to listen for the proxy.",
+	).Default(":9443").String()
+	caCert = kingpin.Flag(
+		"ca.cert",
+		"Certificate authority cert in PEM format.",
+	).Default("ca.pem").String()
+	certFile = kingpin.Flag(
+		"cert.file",
+		"Certificate for the TLS server in PEM format",
+	).Default("cert.pem").String()
+	keyFile = kingpin.Flag(
+		"key.file",
+		"Key for the TLS server in PEM format",
+	).Default("cert.pem").String()
+)
+
+// Proxy strcut
 type Proxy struct {
 }
 
@@ -73,7 +94,13 @@ func getExporterPort(req *http.Request) (exporterPort string) {
 }
 
 func main() {
-	caCert, _ := ioutil.ReadFile("certs/ca.pem")
+	kingpin.HelpFlag.Short('h')
+	kingpin.Parse()
+
+	caCert, err := ioutil.ReadFile(*caCert)
+	if err != nil {
+		log.Fatalf("Problem reading the CA cert: %s\n", err)
+	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
@@ -87,11 +114,13 @@ func main() {
 
 	proxy := NewProxy()
 
-	log.Println("Starting metric proxy server")
+	log.Printf("Starting metric proxy server on: %s\n", *listenAddress)
 	server := &http.Server{
-		Addr:      ":9443",
+		Addr:      *listenAddress,
 		TLSConfig: tlsConfig,
 		Handler:   proxy,
 	}
-	server.ListenAndServeTLS("certs/proxy.pem", "certs/proxy-key.pem")
+	if err = server.ListenAndServeTLS(*certFile, *keyFile); err != nil {
+		log.Fatalf("Problem starting the proxy: %s\n", err)
+	}
 }
